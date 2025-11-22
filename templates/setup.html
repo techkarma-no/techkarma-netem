@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>techkarma · netem setup</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 24px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #020617;
+      color: #e5e7eb;
+    }
+    .shell {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 1.6rem;
+      margin-bottom: 8px;
+    }
+    p {
+      color: #9ca3af;
+      font-size: 0.92rem;
+    }
+    .card {
+      margin-top: 18px;
+      padding: 18px;
+      border-radius: 14px;
+      background: #020617;
+      border: 1px solid #1f2937;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+    }
+    label {
+      font-size: 0.85rem;
+      color: #9ca3af;
+      display: block;
+      margin-bottom: 4px;
+    }
+    select {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 8px;
+      border: 1px solid #1f2937;
+      background: #020617;
+      color: #e5e7eb;
+      margin-bottom: 10px;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 12px;
+    }
+    .btn {
+      margin-top: 16px;
+      padding: 8px 16px;
+      border-radius: 9999px;
+      border: none;
+      background: #22e6b8;
+      color: #020617;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .iface-list {
+      margin-top: 18px;
+      font-size: 0.86rem;
+      color: #9ca3af;
+    }
+    .iface-list code {
+      font-size: 0.8rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <h1>techkarma netem · initial setup</h1>
+    <p>
+      Select which Linux interfaces should form WAN links. Each link uses an
+      <strong>inner</strong> (towards your firewall/router) and an
+      <strong>outer</strong> (towards your WAN/ISP side). Bridges will be created
+      automatically (e.g. <code>br-wan1</code>).
+    </p>
+
+    <form method="post" class="card">
+      <h2>WAN links</h2>
+      <p style="margin-top:4px;margin-bottom:10px;">
+        You can configure up to two links here (WAN1 and WAN2). Leave a pair empty if you don't need it.
+      </p>
+
+      <div class="row">
+        <div>
+          <h3>WAN 1</h3>
+          <label for="wan1_inner">Inner interface (towards firewall)</label>
+          <select id="wan1_inner" name="wan1_inner">
+            <option value="">-- not used --</option>
+            {% for iface in interfaces %}
+              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% endfor %}
+          </select>
+
+          <label for="wan1_outer">Outer interface (towards WAN)</label>
+          <select id="wan1_outer" name="wan1_outer">
+            <option value="">-- not used --</option>
+            {% for iface in interfaces %}
+              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <h3>WAN 2</h3>
+          <label for="wan2_inner">Inner interface (towards firewall)</label>
+          <select id="wan2_inner" name="wan2_inner">
+            <option value="">-- not used --</option>
+            {% for iface in interfaces %}
+              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% endfor %}
+          </select>
+
+          <label for="wan2_outer">Outer interface (towards WAN)</label>
+          <select id="wan2_outer" name="wan2_outer">
+            <option value="">-- not used --</option>
+            {% for iface in interfaces %}
+              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <button class="btn" type="submit">Save & create bridges</button>
+    </form>
+
+    <div class="iface-list">
+      <strong>Detected interfaces:</strong>
+      <ul>
+        {% for iface in interfaces %}
+          <li>
+            <code>{{ iface.name }}</code>
+            {% if iface.ips %} – IP: {{ iface.ips | join(", ") }}{% endif %}
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</body>
+</html>

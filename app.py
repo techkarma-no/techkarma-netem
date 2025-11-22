@@ -1,0 +1,375 @@
+#!/usr/bin/env python3
+import json
+import re
+import subprocess
+from pathlib import Path
+
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+)
+
+app = Flask(__name__)
+app.secret_key = "techkarma-netem"  # kan endres hvis du vil
+
+BASE_DIR = Path(__file__).parent
+CONFIG_PATH = BASE_DIR / "config.json"
+
+TC = "/usr/sbin/tc"
+IP = "/usr/sbin/ip"
+
+
+# ---------- Helper: shell ----------
+
+def run_cmd(cmd):
+    """Run command and return (rc, stdout, stderr)."""
+    proc = subprocess.Popen(
+        cmd,
+        shell=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    out, err = proc.communicate()
+    return proc.returncode, out.strip(), err.strip()
+
+
+# ---------- Config ----------
+
+def load_config():
+    if CONFIG_PATH.exists():
+        try:
+            with CONFIG_PATH.open() as f:
+                return json.load(f)
+        except Exception:
+            return {}
+    return {}
+
+
+def save_config(cfg):
+    tmp = CONFIG_PATH.with_suffix(".tmp")
+    with tmp.open("w") as f:
+        json.dump(cfg, f, indent=2)
+    tmp.replace(CONFIG_PATH)
+
+
+# ---------- NIC discovery ----------
+
+def get_all_nics():
+    """
+    Returns a list of all non-loopback NIC names (including bridges),
+    e.g. ["ens18", "ens19", "ens20", "ens21", "ens22", "br-wan1"].
+    """
+    rc, out, err = run_cmd(f"{IP} -o link show")
+    if rc != 0:
+        return []
+
+    nics = []
+    for line in out.splitlines():
+        # "2: ens18: <BROADCAST,..."
+        parts = line.split(": ", 2)
+        if len(parts) < 2:
+            continue
+        name = parts[1].split("@", 1)[0]
+        if name == "lo":
+            continue
+        nics.append(name.strip())
+    return sorted(nics)
+
+
+def guess_mgmt_interface():
+    """
+    Guess mgmt interface as the one with an IPv4 address.
+    """
+    rc, out, err = run_cmd(f"{IP} -o addr show")
+    if rc != 0:
+        return None
+
+    candidates = []
+    for line in out.splitlines():
+        # example: "2: ens18    inet 10.240.54.8/24 ..."
+        parts = line.split()
+        if len(parts) >= 4 and parts[2] == "inet":
+            ifname = parts[1]
+            ifname = ifname.split("@", 1)[0]
+            if ifname != "lo":
+                candidates.append(ifname)
+
+    return candidates[0] if candidates else None
+
+
+def get_wan_nics(cfg=None):
+    """
+    Return only NICs that are eligible for WAN simulation:
+    - not loopback
+    - not mgmt
+    - not bridges (br-*)
+    """
+    if cfg is None:
+        cfg = load_config()
+
+    mgmt = cfg.get("mgmt_interface")
+    all_nics = get_all_nics()
+
+    wan = []
+    for name in all_nics:
+        if name.startswith("br-"):
+            continue
+        if mgmt and name == mgmt:
+            continue
+        wan.append(name)
+
+    return wan
+
+
+# ---------- qdisc parsing / netem ----------
+
+def parse_qdisc_output(raw: str):
+    """
+    Parse `tc qdisc show dev <if>` output into a small dict.
+    We only try to extract netem parameters; otherwise we return kind only.
+    """
+    info = {
+        "raw": raw.strip(),
+        "parsed": {
+            "kind": None,
+            "delay_ms": None,
+            "jitter_ms": None,
+            "loss_pct": None,
+            "rate_mbit": None,
+        },
+    }
+
+    if not raw.strip():
+        return info
+
+    # Use the first line only (root qdisc)
+    first_line = raw.splitlines()[0]
+
+    # Identify qdisc kind
+    m_kind = re.search(r"qdisc\s+(\S+)\s+\d+:", first_line)
+    if m_kind:
+        kind = m_kind.group(1)
+        info["parsed"]["kind"] = kind
+    else:
+        return info
+
+    if info["parsed"]["kind"] != "netem":
+        # we only parse details for netem
+        return info
+
+    # delay Xms
+    m_delay = re.search(r"delay\s+([\d\.]+)ms", first_line)
+    if m_delay:
+        info["parsed"]["delay_ms"] = float(m_delay.group(1))
+
+    # jitter Yms (optional second number in delay line)
+    # e.g. "delay 100ms 20ms"
+    m_delay2 = re.search(r"delay\s+([\d\.]+)ms\s+([\d\.]+)ms", first_line)
+    if m_delay2:
+        info["parsed"]["jitter_ms"] = float(m_delay2.group(2))
+
+    # loss
+    m_loss = re.search(r"loss\s+([\d\.]+)%", first_line)
+    if m_loss:
+        info["parsed"]["loss_pct"] = float(m_loss.group(1))
+
+    # rate - typically appears in a separate tbf qdisc, but we keep placeholder
+    # We'll parse from any subsequent line with 'tbf rate'
+    for line in raw.splitlines():
+        m_rate = re.search(r"tbf\s+.*rate\s+([\d\.]+)([KMG])bit", line)
+        if m_rate:
+            value = float(m_rate.group(1))
+            unit = m_rate.group(2).upper()
+            if unit == "K":
+                value = value / 1000.0
+            elif unit == "G":
+                value = value * 1000.0
+            info["parsed"]["rate_mbit"] = value
+            break
+
+    return info
+
+
+def get_qdisc_state(ifname: str):
+    rc, out, err = run_cmd(f"{TC} qdisc show dev {ifname}")
+    if rc != 0:
+        raw = err or ""
+    else:
+        raw = out or ""
+    return parse_qdisc_output(raw)
+
+
+def clear_qdisc(ifname: str):
+    run_cmd(f"{TC} qdisc del dev {ifname} root")
+
+
+def apply_netem(ifname: str, delay_ms: float, jitter_ms: float,
+                loss_pct: float, rate_mbit: float):
+    """
+    Apply netem + optional tbf on interface.
+    """
+    # Always start clean
+    clear_qdisc(ifname)
+
+    # Build base netem args
+    parts = ["netem"]
+    if delay_ms and delay_ms > 0:
+        if jitter_ms and jitter_ms > 0:
+            parts.append(f"delay {delay_ms:.1f}ms {jitter_ms:.1f}ms")
+        else:
+            parts.append(f"delay {delay_ms:.1f}ms")
+    if loss_pct and loss_pct > 0:
+        parts.append(f"loss {loss_pct:.3f}%")
+
+    netem_cmd = f"{TC} qdisc add dev {ifname} root handle 1:0 " + " ".join(parts)
+    rc, out, err = run_cmd(netem_cmd)
+
+    if rc != 0:
+        return False, f"Failed to apply netem: {err or out or 'unknown error'}"
+
+    # tbf for bandwidth if requested
+    if rate_mbit and rate_mbit > 0:
+        # keep it simple
+        rate_str = f"{rate_mbit:.3f}mbit"
+        # attach tbf as child
+        tbf_cmd = (
+            f"{TC} qdisc add dev {ifname} parent 1:1 handle 10: tbf "
+            f"rate {rate_str} buffer 3200 limit 32768"
+        )
+        rc2, out2, err2 = run_cmd(tbf_cmd)
+        if rc2 != 0:
+            # not fatal, but we report it
+            return False, f"Netem OK, but tbf failed: {err2 or out2 or 'unknown error'}"
+
+    return True, "OK"
+
+
+# ---------- Routes ----------
+
+@app.route("/")
+def index():
+    cfg = load_config()
+    mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+    if mgmt and not cfg.get("mgmt_interface"):
+        # lagre første gang vi gjetter den
+        cfg["mgmt_interface"] = mgmt
+        save_config(cfg)
+
+    wan_nics = get_wan_nics(cfg)
+
+    nic_states = []
+    for ifname in wan_nics:
+        qdisc_info = get_qdisc_state(ifname)
+        nic_states.append(
+            {
+                "name": ifname,
+                "qdisc": qdisc_info,
+            }
+        )
+
+    return render_template(
+        "index.html",
+        mgmt_interface=mgmt,
+        wan_nics=wan_nics,
+        nic_states=nic_states,
+        config=cfg,
+    )
+
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    cfg = load_config()
+    force = request.args.get("force") == "1"
+
+    if request.method == "POST":
+        # lagre mgmt-interface (og evt. mer senere)
+        mgmt = request.form.get("mgmt_interface") or guess_mgmt_interface()
+        if mgmt:
+            cfg["mgmt_interface"] = mgmt
+            save_config(cfg)
+            flash(f"Management interface set to {mgmt}", "success")
+        else:
+            flash("Could not determine management interface.", "error")
+
+        return redirect(url_for("index"))
+
+    # GET
+    all_nics = get_all_nics()
+    guessed_mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+
+    return render_template(
+        "setup.html",
+        all_nics=all_nics,
+        guessed_mgmt=guessed_mgmt,
+        config=cfg,
+        force=force,
+    )
+
+
+@app.route("/reset-config", methods=["POST"])
+def reset_config():
+    # Her kan vi også rive ned bridges etc senere hvis vi vil
+    if CONFIG_PATH.exists():
+        CONFIG_PATH.unlink()
+    flash("Configuration reset. Run setup again.", "info")
+    return redirect(url_for("setup"))
+
+
+@app.route("/configure", methods=["POST"])
+def configure():
+    """
+    Apply netem settings to a single interface.
+    Expect form fields:
+      itf, delay_ms, jitter_ms, loss_pct, rate_mbit
+    """
+    ifname = request.form.get("itf") or request.args.get("itf")
+    if not ifname:
+        flash("Missing interface name.", "error")
+        return redirect(url_for("index"))
+
+    try:
+        delay_ms = float(request.form.get("delay_ms") or 0)
+    except ValueError:
+        delay_ms = 0.0
+    try:
+        jitter_ms = float(request.form.get("jitter_ms") or 0)
+    except ValueError:
+        jitter_ms = 0.0
+    try:
+        loss_pct = float(request.form.get("loss_pct") or 0)
+    except ValueError:
+        loss_pct = 0.0
+    try:
+        rate_mbit = float(request.form.get("rate_mbit") or 0)
+    except ValueError:
+        rate_mbit = 0.0
+
+    ok, msg = apply_netem(ifname, delay_ms, jitter_ms, loss_pct, rate_mbit)
+    if ok:
+        flash(f"Applied netem on {ifname}: {msg}", "success")
+    else:
+        flash(f"Failed to apply netem on {ifname}: {msg}", "error")
+
+    return redirect(url_for("index"))
+
+
+@app.route("/clear", methods=["POST"])
+def clear():
+    ifname = request.form.get("itf") or request.args.get("itf")
+    if not ifname:
+        flash("Missing interface name.", "error")
+        return redirect(url_for("index"))
+
+    clear_qdisc(ifname)
+    flash(f"Cleared qdisc on {ifname}", "info")
+    return redirect(url_for("index"))
+
+
+if __name__ == "__main__":
+    # For utvikling – i prod kjører du via systemd
+    app.run(host="0.0.0.0", port=8081, debug=True)

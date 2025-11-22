@@ -1,0 +1,663 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>techkarma · WAN lab</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0d1117;
+      --bg-alt: #111827;
+      --card: #111827;
+      --card-soft: #1f2937;
+      --accent: #22e6b8;
+      --accent-soft: rgba(34, 230, 184, 0.2);
+      --accent2: #38bdf8;
+      --accent2-soft: rgba(56, 189, 248, 0.2);
+      --text: #e5e7eb;
+      --muted: #94a3b8;
+      --border: #1f2937;
+      --danger: #f97373;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, #0b1120 0, #020617 45%, #020617 100%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a { color: inherit; text-decoration: none; }
+
+    .app-shell {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 20px 24px 28px;
+    }
+
+    /* Header / navbar */
+
+    .top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-logo {
+      height: 30px;
+      display: flex;
+      align-items: center;
+    }
+
+    .brand-logo img {
+      height: 100%;
+      display: block;
+    }
+
+    .brand-text {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .brand-name {
+      font-size: 1.3rem;
+      font-weight: 600;
+      text-transform: lowercase;
+      letter-spacing: 0.03em;
+    }
+
+    .brand-name span.accent {
+      color: var(--accent);
+    }
+
+    .brand-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+
+    .top-right-pill {
+      font-size: 0.78rem;
+      padding: 5px 10px;
+      border-radius: 9999px;
+      border: 1px solid rgba(148, 163, 184, 0.4);
+      background: rgba(15, 23, 42, 0.95);
+      color: var(--muted);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .pill-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 9999px;
+      background: radial-gradient(circle, #4ade80, #16a34a);
+      box-shadow: 0 0 12px rgba(34, 197, 94, 0.85);
+    }
+
+    /* Intro */
+
+    .subtitle {
+      font-size: 0.9rem;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    .subtitle code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.8rem;
+      background: rgba(15, 23, 42, 0.9);
+      padding: 2px 6px;
+      border-radius: 9999px;
+      border: 1px solid rgba(55, 65, 81, 0.8);
+    }
+
+
+    /* Grid / cards */
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 18px;
+      margin-top: 10px;
+    }
+
+    .iface-card {
+      position: relative;
+      border-radius: 16px;
+      padding: 16px 18px 14px;
+      background: radial-gradient(circle at top left,
+          rgba(30, 64, 175, 0.28),
+          rgba(15, 23, 42, 0.98));
+      border: 1px solid rgba(75, 85, 99, 0.55);
+      box-shadow: 0 22px 40px rgba(0, 0, 0, 0.75);
+      overflow: hidden;
+    }
+
+    .iface-card::before {
+      content: "";
+      position: absolute;
+      inset: -40%;
+      background:
+        radial-gradient(circle at top left, var(--accent-soft), transparent 60%);
+      opacity: 0.6;
+      pointer-events: none;
+      mix-blend-mode: screen;
+    }
+
+    .iface-card.wan2::before {
+      background:
+        radial-gradient(circle at top left, var(--accent2-soft), transparent 60%);
+    }
+
+    .iface-inner {
+      position: relative;
+      z-index: 1;
+    }
+
+    .iface-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .iface-name {
+      font-size: 1.05rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      text-transform: lowercase;
+    }
+
+    .iface-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 9999px;
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(34, 230, 184, 0.9);
+    }
+
+    .iface-card.wan2 .iface-dot {
+      background: var(--accent2);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.9);
+    }
+
+    .iface-tag {
+      font-size: 0.75rem;
+      padding: 3px 9px;
+      border-radius: 9999px;
+      border: 1px solid rgba(148, 163, 184, 0.65);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }
+
+    /* Sliders */
+
+    .slider-group {
+      margin-top: 7px;
+    }
+
+    .slider-label-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.78rem;
+      margin-bottom: 4px;
+      color: var(--muted);
+    }
+
+    .slider-label-row span:first-child {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 0.7rem;
+    }
+
+    .slider-value {
+      font-variant-numeric: tabular-nums;
+      color: var(--accent);
+    }
+
+    .iface-card.wan2 .slider-value {
+      color: var(--accent2);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      appearance: none;
+      height: 6px;
+      border-radius: 9999px;
+      background: #020617;
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 9999px;
+      background: var(--accent);
+      border: 2px solid #020617;
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      cursor: pointer;
+    }
+
+    .iface-card.wan2 input[type="range"]::-webkit-slider-thumb {
+      background: var(--accent2);
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 14px;
+      height: 14px;
+      border-radius: 9999px;
+      background: var(--accent);
+      border: 2px solid #020617;
+      box-shadow: 0 0 0 4px var(--accent-soft);
+      cursor: pointer;
+    }
+
+    .iface-card.wan2 input[type="range"]::-moz-range-thumb {
+      background: var(--accent2);
+      box-shadow: 0 0 0 4px rgba(56, 189, 248, 0.25);
+    }
+
+    /* Buttons */
+
+    .button-row {
+      margin-top: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .btn {
+      padding: 6px 12px;
+      border-radius: 9999px;
+      border: 1px solid rgba(148, 163, 184, 0.5);
+      background: rgba(15, 23, 42, 0.9);
+      color: var(--text);
+      font-size: 0.78rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .btn:hover {
+      border-color: var(--accent);
+    }
+
+    .iface-card.wan2 .btn:hover {
+      border-color: var(--accent2);
+    }
+
+    .btn-reset {
+      background: rgba(248, 113, 113, 0.14);
+      border-color: rgba(248, 113, 113, 0.8);
+    }
+
+    .btn-reset:hover {
+      border-color: var(--danger);
+    }
+
+    .btn-preset {
+      border-style: dashed;
+      opacity: 0.9;
+    }
+
+    /* Status */
+
+    .status-wrapper {
+      margin-top: 12px;
+      font-size: 0.78rem;
+    }
+
+    .status-title {
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.7rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .profile-line {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .profile-line strong {
+      color: var(--text);
+    }
+
+    .status-box {
+      background: #050814;
+      padding: 8px;
+      border-radius: 10px;
+      border: 1px solid rgba(55, 65, 81, 0.85);
+      font-size: 0.75rem;
+      white-space: pre-wrap;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    /* Health bar */
+
+    .health-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      margin-top: 4px;
+    }
+
+    .health-bar {
+      flex: 1;
+      height: 7px;
+      border-radius: 9999px;
+      background: #020617;
+      border: 1px solid rgba(148, 163, 184, 0.22);
+      overflow: hidden;
+    }
+
+    .health-fill {
+      height: 100%;
+      border-radius: 9999px;
+      transition: width 0.25s ease-out;
+    }
+
+    .health-good {
+      background: linear-gradient(to right, #22e6b8, #4ade80);
+      box-shadow: 0 0 8px rgba(34,230,184,0.6);
+    }
+
+    .health-degraded {
+      background: linear-gradient(to right, #eab308, #facc15);
+      box-shadow: 0 0 8px rgba(234,179,8,0.4);
+    }
+
+    .health-bad {
+      background: linear-gradient(to right, #f97316, #fb923c);
+      box-shadow: 0 0 8px rgba(249,115,22,0.4);
+    }
+
+    .health-dead {
+      background: linear-gradient(to right, #ef4444, #dc2626);
+      box-shadow: 0 0 8px rgba(248,113,113,0.5);
+    }
+
+    .health-text {
+      font-size: 0.78rem;
+      color: var(--muted);
+      min-width: 90px;
+      text-align: right;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+
+    .footer {
+      margin-top: 18px;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: right;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+
+    <header class="top-bar">
+      <div class="brand">
+        <div class="brand-logo">
+          <img src="{{ url_for('static', filename='techkarma-logo.png') }}" alt="techkarma logo">
+        </div>
+        <div class="brand-text">
+          <div class="brand-name">
+            tech<span class="accent">karma</span>
+          </div>
+          <div class="brand-sub">
+            wan lab · netem controller
+          </div>
+        </div>
+      </div>
+
+      <div class="top-right-pill">
+        <span class="pill-dot"></span>
+        live · shaping ens19 / ens20
+      </div>
+    </header>
+
+    <div class="subtitle">
+      Shape your WAN links by adjusting <strong>delay</strong>, <strong>jitter</strong>,
+      <strong>loss</strong> and <strong>rate</strong> on each interface. Typically
+      <code>ens19</code> = WAN1 (ISP1) and <code>ens20</code> = WAN2 (ISP2).
+    </div>
+
+    <main class="grid">
+      {% for iface in interfaces %}
+        {% set wan2 = iface.endswith('20') %}
+        {% set st = statuses[iface] %}
+        {% set s = st.settings %}
+
+        <section class="iface-card {{ 'wan2' if wan2 else '' }}" data-iface="{{ iface }}">
+          <div class="iface-inner">
+            <div class="iface-header">
+              <div class="iface-name">
+                <div class="iface-dot"></div>
+                {{ iface }}
+              </div>
+              <div class="iface-tag">
+                {% if iface.endswith('19') %}
+                  wan1 · isp1
+                {% elif iface.endswith('20') %}
+                  wan2 · isp2
+                {% else %}
+                  wan link
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- APPLY FORM -->
+            <form method="post" action="{{ url_for('apply') }}" class="apply-form">
+              <input type="hidden" name="iface" value="{{ iface }}">
+
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>delay</span>
+                  <span class="slider-value">
+                    {% if s and s.delay is not none %}{{ s.delay }} ms{% else %}0 ms{% endif %}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  name="delay"
+                  min="0"
+                  max="1000"
+                  step="10"
+                  value="{{ s.delay if s and s.delay is not none else 0 }}"
+                  data-unit="ms"
+                >
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>jitter</span>
+                  <span class="slider-value">
+                    {% if s and s.jitter is not none %}{{ s.jitter }} ms{% else %}0 ms{% endif %}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  name="jitter"
+                  min="0"
+                  max="500"
+                  step="10"
+                  value="{{ s.jitter if s and s.jitter is not none else 0 }}"
+                  data-unit="ms"
+                >
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>loss</span>
+                  <span class="slider-value">
+                    {% if s and s.loss is not none %}{{ s.loss }} %{% else %}0 %{% endif %}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  name="loss"
+                  min="0"
+                  max="20"
+                  step="0.1"
+                  value="{{ s.loss if s and s.loss is not none else 0 }}"
+                  data-unit="%"
+                >
+              </div>
+
+              <div class="slider-group">
+                <div class="slider-label-row">
+                  <span>rate</span>
+                  <span class="slider-value">
+                    {% if s and s.rate is not none %}{{ s.rate }} Mbit{% else %}unlimited{% endif %}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  name="rate"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="{{ s.rate if s and s.rate is not none else 0 }}"
+                  data-unit="Mbit"
+                >
+              </div>
+
+              <div class="button-row">
+                <button class="btn" type="submit">apply</button>
+                <button class="btn btn-preset" type="button" onclick="preset('{{ iface }}','good')">good</button>
+                <button class="btn btn-preset" type="button" onclick="preset('{{ iface }}','degraded')">degraded</button>
+                <button class="btn btn-preset" type="button" onclick="preset('{{ iface }}','bad')">bad</button>
+                <button class="btn btn-preset" type="button" onclick="preset('{{ iface }}','dead')">dead</button>
+              </div>
+            </form>
+
+            <!-- RESET FORM -->
+            <form method="post" action="{{ url_for('reset') }}">
+              <input type="hidden" name="iface" value="{{ iface }}">
+              <div class="button-row">
+                <button class="btn btn-reset" type="submit">reset</button>
+              </div>
+            </form>
+
+            <div class="status-wrapper">
+              <div class="status-title">current profile</div>
+              <div class="profile-line">
+                {% if s %}
+                  Delay: <strong>{{ s.delay if s.delay is not none else 0 }} ms</strong> ·
+                  Jitter: <strong>{{ s.jitter if s.jitter is not none else 0 }} ms</strong> ·
+                  Loss: <strong>{{ s.loss if s.loss is not none else 0 }} %</strong> ·
+                  Rate: <strong>
+                    {% if s.rate is not none %}
+                      {{ s.rate }} Mbit
+                    {% else %}
+                      unlimited
+                    {% endif %}
+                  </strong>
+                {% else %}
+                  <em>No profile set via GUI (kernel default qdisc)</em>
+                {% endif %}
+              </div>
+
+              <div class="status-title">link health</div>
+              <div class="health-row">
+                <div class="health-bar">
+                  <div
+                    class="health-fill health-{{ st.health_label }}"
+                    style="width: {{ st.health_score }}%;"
+                  ></div>
+                </div>
+                <div class="health-text">
+                  {{ st.health_label }} · {{ st.health_score }}%
+                </div>
+              </div>
+
+              <div class="status-title">tc qdisc</div>
+              <div class="status-box">{{ st.raw }}</div>
+            </div>
+          </div>
+        </section>
+      {% endfor %}
+    </main>
+
+    <footer class="footer">
+      techkarma · wan lab · powered by tc/netem
+    </footer>
+  </div>
+
+  <script>
+    function initSliders() {
+      document.querySelectorAll(".iface-card").forEach(card => {
+        card.querySelectorAll("input[type=range]").forEach(slider => {
+          const label = slider.parentElement.querySelector(".slider-value");
+          const unit = slider.dataset.unit || "";
+          function update() {
+            if (slider.name === "rate" && slider.value === "0") {
+              label.textContent = "unlimited";
+            } else {
+              label.textContent = slider.value + " " + unit;
+            }
+          }
+          slider.addEventListener("input", update);
+          update();
+        });
+      });
+    }
+
+    function preset(iface, type) {
+      const card = document.querySelector('.iface-card[data-iface="'+iface+'"]');
+      if (!card) return;
+      const d = card.querySelector('input[name="delay"]');
+      const j = card.querySelector('input[name="jitter"]');
+      const l = card.querySelector('input[name="loss"]');
+      const r = card.querySelector('input[name="rate"]');
+
+      if (type === "good") {
+        d.value = 20; j.value = 5; l.value = 0; r.value = 100;
+      } else if (type === "degraded") {
+        d.value = 120; j.value = 40; l.value = 1; r.value = 20;
+      } else if (type === "bad") {
+        d.value = 350; j.value = 80; l.value = 3; r.value = 5;
+      } else if (type === "dead") {
+        d.value = 0; j.value = 0; l.value = 100; r.value = 0;
+      }
+
+      initSliders();
+      const form = card.querySelector("form.apply-form");
+      if (form) form.submit();
+    }
+
+    document.addEventListener("DOMContentLoaded", initSliders);
+  </script>
+</body>
+</html>
