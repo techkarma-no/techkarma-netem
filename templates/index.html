@@ -630,7 +630,11 @@
             <div class="card-header">
               <div>
                 <div class="card-title">
-                  {{ nic.name }}
+                  {% if nic.label %}
+                    {{ nic.label }} · <code>{{ nic.name }}</code>
+                  {% else %}
+                    {{ nic.name }}
+                  {% endif %}
                   <span class="pill-inline">
                     {% if q.kind %}
                       qdisc: {{ q.kind }}

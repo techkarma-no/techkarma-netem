@@ -320,7 +320,7 @@ def inject_nav():
 def index():
     cfg = load_config()
 
-    # If we don't have WAN links configured yet -> go to wizard
+    # Hvis vi ikke har WAN-links ennå, send til wizard
     if not cfg.get("wan_links"):
         return redirect(url_for("setup"))
 
@@ -329,28 +329,18 @@ def index():
         cfg["mgmt_interface"] = mgmt
         save_config(cfg)
 
-    # Bygg opp state per fysisk interface (inner/outer), ikke per bridge
     nic_states = []
     for link in cfg.get("wan_links", []):
         name = link.get("name", "WAN")
         inner = link.get("inner")
-        outer = link.get("outer")
+        # outer = link.get("outer")  # vi bruker ikke outer i dashboard nå
 
         if inner:
             qdisc_info = get_qdisc_state(inner)
             nic_states.append(
                 {
                     "name": inner,
-                    "label": f"{name} inner",
-                    "qdisc": qdisc_info,
-                }
-            )
-        if outer:
-            qdisc_info = get_qdisc_state(outer)
-            nic_states.append(
-                {
-                    "name": outer,
-                    "label": f"{name} outer",
+                    "label": f"{name} (inner)",
                     "qdisc": qdisc_info,
                 }
             )
@@ -362,7 +352,6 @@ def index():
         nic_states=nic_states,
         wan_links=cfg.get("wan_links", []),
     )
-
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
