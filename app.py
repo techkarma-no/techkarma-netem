@@ -119,6 +119,8 @@ def get_wan_nics(cfg=None):
     for name in all_nics:
         if name.startswith("br-"):
             continue
+        if name == "lo":
+            continue
         if mgmt and name == mgmt:
             continue
         wan.append(name)
@@ -254,11 +256,12 @@ def apply_netem(ifname: str, delay_ms: float, jitter_ms: float,
 @app.route("/")
 def index():
     cfg = load_config()
+
+    # 🔹 Hvis vi ikke har config, eller mangler mgmt_interface -> send til wizard
+    if not cfg or "mgmt_interface" not in cfg:
+        return redirect(url_for("setup"))
+
     mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
-    if mgmt and not cfg.get("mgmt_interface"):
-        # lagre første gang vi gjetter den
-        cfg["mgmt_interface"] = mgmt
-        save_config(cfg)
 
     wan_nics = get_wan_nics(cfg)
 
