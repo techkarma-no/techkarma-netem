@@ -1,147 +1,484 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>techkarma · netem setup</title>
+  <meta charset="utf-8" />
+  <title>techkarma · WAN lab · setup</title>
+  <!-- samme CSS som index, men litt mindre – gjenbruker layout/sidebar/main/btn osv -->
   <style>
+    :root {
+      --bg: #020617;
+      --card-bg: rgba(15, 23, 42, 0.96);
+      --border-subtle: #1f2937;
+      --accent: #22e6b8;
+      --accent-soft: rgba(34, 230, 184, 0.12);
+      --text-main: #e5e7eb;
+      --text-muted: #9ca3af;
+      --danger: #f97373;
+      --danger-soft: rgba(239, 68, 68, 0.16);
+    }
+
+    * { box-sizing: border-box; }
+
     body {
       margin: 0;
-      padding: 24px;
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #020617;
-      color: #e5e7eb;
+      background:
+        radial-gradient(circle at top left, rgba(34, 230, 184, 0.18), transparent 60%),
+        radial-gradient(circle at bottom right, rgba(37, 99, 235, 0.18), transparent 60%),
+        var(--bg);
+      color: var(--text-main);
     }
-    .shell {
-      max-width: 800px;
-      margin: 0 auto;
+
+    a { color: inherit; text-decoration: none; }
+
+    .layout {
+      display: flex;
+      min-height: 100vh;
     }
-    h1 {
-      font-size: 1.6rem;
-      margin-bottom: 8px;
+
+    .sidebar {
+      width: 250px;
+      padding: 22px 20px;
+      border-right: 1px solid var(--border-subtle);
+      background:
+        radial-gradient(circle at top, rgba(34, 230, 184, 0.12), transparent 65%),
+        #020617;
+      display: flex;
+      flex-direction: column;
     }
-    p {
-      color: #9ca3af;
-      font-size: 0.92rem;
+
+    .sidebar-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 26px;
     }
-    .card {
-      margin-top: 18px;
-      padding: 18px;
-      border-radius: 14px;
-      background: #020617;
-      border: 1px solid #1f2937;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.6);
+
+    .sidebar-logo-box {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      background: radial-gradient(circle at 30% 20%, #22e6b8, #0ea5e9);
+      box-shadow: 0 0 18px rgba(34, 230, 184, 0.8);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #020617;
     }
-    label {
+
+    .sidebar-title {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .logo-wordmark {
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      font-size: 0.98rem;
+      text-transform: uppercase;
+    }
+
+    .logo-tech { color: #f9fafb; }
+    .logo-karma { color: var(--accent); }
+
+    .sidebar-title-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+
+    .nav-section-title {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .nav-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    .nav-item { margin-bottom: 4px; }
+
+    .nav-link {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 10px;
+      border-radius: 999px;
       font-size: 0.85rem;
+      color: #cbd5e1;
+      transition: background 0.15s ease, color 0.15s ease, transform 0.08s ease;
+    }
+
+    .nav-link:hover {
+      background: rgba(15, 23, 42, 0.92);
+      transform: translateX(1px);
+    }
+
+    .nav-link-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #475569;
+    }
+
+    .nav-item-active .nav-link {
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    .nav-item-active .nav-link-dot {
+      background: var(--accent);
+      box-shadow: 0 0 10px rgba(34, 230, 184, 0.7);
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      border-top: 1px solid #1e293b;
+      padding-top: 10px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(15, 23, 42, 0.9);
+      font-size: 0.7rem;
       color: #9ca3af;
+      gap: 4px;
+    }
+
+    .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #22e6b8;
+    }
+
+    .main {
+      flex: 1;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .top-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 4px;
+    }
+
+    .top-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .top-title {
+      font-size: 1.1rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    .top-sub {
+      font-size: 0.86rem;
+      color: var(--text-muted);
+    }
+
+    .top-sub code {
+      font-size: 0.8rem;
+      padding: 1px 6px;
+      border-radius: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid #1f2937;
+    }
+
+    .top-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .btn {
+      border-radius: 999px;
+      padding: 6px 14px;
+      font-size: 0.82rem;
+      border: 1px solid transparent;
+      background: rgba(15, 23, 42, 0.9);
+      color: #cbd5e1;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+    }
+
+    .btn-danger {
+      border-color: rgba(239, 68, 68, 0.9);
+      color: #fecaca;
+      background: var(--danger-soft);
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.22);
+    }
+
+    .btn-icon { font-size: 0.95rem; }
+
+    .flash-area { margin-bottom: 4px; }
+    .flash {
+      margin-bottom: 6px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 0.82rem;
+      border: 1px solid transparent;
+    }
+    .flash.success {
+      background: rgba(34, 197, 94, 0.08);
+      border-color: rgba(34, 197, 94, 0.7);
+      color: #bbf7d0;
+    }
+    .flash.error {
+      background: rgba(248, 113, 113, 0.08);
+      border-color: rgba(248, 113, 113, 0.85);
+      color: #fecaca;
+    }
+    .flash.info {
+      background: rgba(59, 130, 246, 0.08);
+      border-color: rgba(59, 130, 246, 0.85);
+      color: #bfdbfe;
+    }
+
+    .card {
+      background:
+        radial-gradient(circle at top left, rgba(34, 230, 184, 0.18), transparent 65%),
+        var(--card-bg);
+      border-radius: 18px;
+      border: 1px solid rgba(15, 23, 42, 0.96);
+      box-shadow: 0 22px 50px rgba(0, 0, 0, 0.75);
+      padding: 18px 20px 18px;
+      margin-top: 8px;
+      max-width: 720px;
+    }
+
+    .card-title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .wan-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
       display: block;
       margin-bottom: 4px;
     }
+
     select {
       width: 100%;
       padding: 6px 10px;
-      border-radius: 8px;
+      border-radius: 10px;
       border: 1px solid #1f2937;
-      background: #020617;
-      color: #e5e7eb;
+      background: rgba(15, 23, 42, 0.96);
+      color: var(--text-main);
+      font-size: 0.85rem;
       margin-bottom: 10px;
     }
-    .row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
-      margin-top: 12px;
-    }
-    .btn {
-      margin-top: 16px;
-      padding: 8px 16px;
-      border-radius: 9999px;
-      border: none;
-      background: #22e6b8;
+
+    .btn-primary {
+      background: var(--accent);
       color: #020617;
       font-weight: 600;
-      cursor: pointer;
+      border-color: rgba(34, 230, 184, 0.55);
+      margin-top: 6px;
     }
-    .iface-list {
-      margin-top: 18px;
-      font-size: 0.86rem;
-      color: #9ca3af;
+
+    .btn-primary:hover {
+      background: #3af0c4;
+      transform: translateY(-0.5px);
     }
-    .iface-list code {
-      font-size: 0.8rem;
+
+    .footer {
+      margin-top: auto;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      text-align: right;
+      padding-top: 8px;
+    }
+
+    @media (max-width: 900px) {
+      .layout { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        flex-direction: row;
+        align-items: center;
+        gap: 18px;
+      }
+      .sidebar-footer { display: none; }
+      .nav-section-title { display: none; }
+      .nav-list { display: flex; gap: 4px; }
+      .nav-item { margin-bottom: 0; }
+      .main { padding: 16px 14px; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <h1>techkarma netem · initial setup</h1>
-    <p>
-      Select which Linux interfaces should form WAN links. Each link uses an
-      <strong>inner</strong> (towards your firewall/router) and an
-      <strong>outer</strong> (towards your WAN/ISP side). Bridges will be created
-      automatically (e.g. <code>br-wan1</code>).
-    </p>
-
-    <form method="post" class="card">
-      <h2>WAN links</h2>
-      <p style="margin-top:4px;margin-bottom:10px;">
-        You can configure up to two links here (WAN1 and WAN2). Leave a pair empty if you don't need it.
-      </p>
-
-      <div class="row">
-        <div>
-          <h3>WAN 1</h3>
-          <label for="wan1_inner">Inner interface (towards firewall)</label>
-          <select id="wan1_inner" name="wan1_inner">
-            <option value="">-- not used --</option>
-            {% for iface in all_nics %}
-              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
-            {% endfor %}
-          </select>
-
-          <label for="wan1_outer">Outer interface (towards WAN)</label>
-          <select id="wan1_outer" name="wan1_outer">
-            <option value="">-- not used --</option>
-            {% for iface in all_nics %}
-              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
-            {% endfor %}
-          </select>
-        </div>
-
-        <div>
-          <h3>WAN 2</h3>
-          <label for="wan2_inner">Inner interface (towards firewall)</label>
-          <select id="wan2_inner" name="wan2_inner">
-            <option value="">-- not used --</option>
-            {% for iface in all_nics %}
-              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
-            {% endfor %}
-          </select>
-
-          <label for="wan2_outer">Outer interface (towards WAN)</label>
-          <select id="wan2_outer" name="wan2_outer">
-            <option value="">-- not used --</option>
-            {% for iface in all_nics %}
-              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
-            {% endfor %}
-          </select>
+  <div class="layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo-box">tk</div>
+        <div class="sidebar-title">
+          <div class="logo-wordmark">
+            <span class="logo-tech">tech</span><span class="logo-karma">karma</span>
+          </div>
+          <div class="sidebar-title-sub">wan lab · netem controller</div>
         </div>
       </div>
 
-      <button class="btn" type="submit">Save & create bridges</button>
-    </form>
+      <div>
+        <div class="nav-section-title">Navigation</div>
+        <ul class="nav-list">
+          {% for item in nav_items %}
+            <li class="nav-item {% if page == item.id %}nav-item-active{% endif %}">
+              <a href="{{ url_for(item.endpoint) }}" class="nav-link">
+                <span class="nav-link-dot"></span>
+                <span>{{ item.label }}</span>
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </div>
 
-    <div class="iface-list">
-      <strong>Detected interfaces:</strong>
-      <ul>
-        {% for iface in all_nics %}
-          <li>
-            <code>{{ iface }}</code>
-            {% if iface.ips %} – IP: {{ iface.ips | join(", ") }}{% endif %}
-          </li>
-        {% endfor %}
-      </ul>
-    </div>
+      <div class="sidebar-footer">
+        <div style="margin-bottom:6px;">Session</div>
+        <div class="pill">
+          <span class="pill-dot"></span>
+          <span>Running</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <div class="top-bar">
+        <div class="top-left">
+          <div class="top-title">Setup</div>
+          <div class="top-sub">
+            Select which Linux interfaces should form <strong>WAN 1</strong> and <strong>WAN 2</strong>.
+            Each WAN link uses an <strong>inner</strong> (towards firewall/router) and an
+            <strong>outer</strong> (towards ISP/WAN). Bridges (<code>br-wan1</code>, <code>br-wan2</code>)
+            are created automatically.
+          </div>
+        </div>
+        <div class="top-right">
+          <form method="post" action="{{ url_for('reset_config') }}"
+                onsubmit="return confirm('Reset configuration, delete bridges and clear qdiscs?');">
+            <button class="btn btn-danger" type="submit">
+              <span class="btn-icon">⟳</span>
+              Reset configuration
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <div class="flash-area">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="flash {{ category }}">{{ message }}</div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+      </div>
+
+      <form method="post">
+        <div class="card">
+          <div class="card-title">WAN links</div>
+          <div class="card-sub">
+            You can configure up to two links here. Leave a pair empty if you only need one WAN.
+          </div>
+
+          <div class="wan-grid">
+            <div>
+              <h3 style="margin:0 0 8px;font-size:0.9rem;">WAN 1</h3>
+              <label for="wan1_inner">Inner interface (towards firewall)</label>
+              <select id="wan1_inner" name="wan1_inner">
+                <option value="">-- not used --</option>
+                {% for nic in all_nics %}
+                  <option value="{{ nic }}">{{ nic }}</option>
+                {% endfor %}
+              </select>
+
+              <label for="wan1_outer">Outer interface (towards WAN)</label>
+              <select id="wan1_outer" name="wan1_outer">
+                <option value="">-- not used --</option>
+                {% for nic in all_nics %}
+                  <option value="{{ nic }}">{{ nic }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div>
+              <h3 style="margin:0 0 8px;font-size:0.9rem;">WAN 2</h3>
+              <label for="wan2_inner">Inner interface (towards firewall)</label>
+              <select id="wan2_inner" name="wan2_inner">
+                <option value="">-- not used --</option>
+                {% for nic in all_nics %}
+                  <option value="{{ nic }}">{{ nic }}</option>
+                {% endfor %}
+              </select>
+
+              <label for="wan2_outer">Outer interface (towards WAN)</label>
+              <select id="wan2_outer" name="wan2_outer">
+                <option value="">-- not used --</option>
+                {% for nic in all_nics %}
+                  <option value="{{ nic }}">{{ nic }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" type="submit">
+            <span class="btn-icon">✔</span>
+            Save & create bridges
+          </button>
+        </div>
+      </form>
+
+      <div class="footer">
+        techkarma · wan lab · powered by tc/netem
+      </div>
+    </main>
   </div>
 </body>
 </html>
+

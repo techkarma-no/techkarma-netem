@@ -307,7 +307,7 @@ def inject_nav():
     return {
         "nav_items": [
             {"id": "dashboard", "label": "Dashboard", "endpoint": "index"},
-            {"id": "setup", "label": "Setup wizard", "endpoint": "setup"},
+            {"id": "setup", "label": "Setup", "endpoint": "setup"},
         ],
         "config": cfg,
     }
