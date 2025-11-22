@@ -28,13 +28,13 @@ def list_interfaces():
 
     ifaces = []
     for line in out.splitlines():
-        # eksempel-linje: "2: ens18: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ..."
+        # Example line: "2: ens18: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 ..."
         parts = line.split(":", 2)
         if len(parts) < 3:
             continue
         idx = parts[0].strip()
         name = parts[1].strip()
-        # Hopp over lo
+        # Skip lo
         if name == "lo":
             continue
 
@@ -43,7 +43,7 @@ def list_interfaces():
             "name": name,
         })
 
-    # optional: slå opp IP-adresser
+    # optional: look up IP
     rc2, out2, err2 = run_cmd(f"{IP} -o addr show")
     addr_map = {}
     if rc2 == 0:
@@ -93,18 +93,18 @@ def ensure_bridge_for_link(link):
     inner = link["inner"]
     outer = link["outer"]
 
-    # Finnes bridge?
+    # Bridge exists?
     rc, out, err = run_cmd(f"{IP} link show {bridge}")
     if rc != 0:
-        # Opprett ny bridge
+        # Configure new bridge
         run_cmd(f"{IP} link add {bridge} type bridge")
 
-    # Legg ifaces inn i bridge (det gjør ikke noe om de allerede er der)
+    # Put ifaces in bridge
     for ifname in (inner, outer):
         run_cmd(f"{IP} link set {ifname} master {bridge}")
         run_cmd(f"{IP} link set {ifname} up")
 
-    # Sett bridge up
+    # Set up bridge
     run_cmd(f"{IP} link set {bridge} up")
 
 

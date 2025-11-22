@@ -14,7 +14,7 @@ from flask import (
 )
 
 app = Flask(__name__)
-app.secret_key = "techkarma-netem"  # endre hvis du vil
+app.secret_key = "techkarma-netem"  
 
 BASE_DIR = Path(__file__).parent
 CONFIG_PATH = BASE_DIR / "config.json"
@@ -306,7 +306,7 @@ def inject_nav():
 def index():
     cfg = load_config()
 
-    # Hvis vi ikke har WAN-links ennå, send til setup
+    # Send to setup if no links configured
     if not cfg.get("wan_links"):
         return redirect(url_for("setup"))
 
@@ -345,7 +345,7 @@ def index():
 def setup():
     cfg = load_config()
 
-    # Sett mgmt hvis vi ikke allerede har det
+    # Set mgmt if not yet configured
     mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
     if mgmt and not cfg.get("mgmt_interface"):
         cfg["mgmt_interface"] = mgmt
@@ -361,7 +361,7 @@ def setup():
         wan1_name = (request.form.get("wan1_name") or "").strip()
         wan2_name = (request.form.get("wan2_name") or "").strip()
 
-        # Riv ned gamle bridges/qdiscs
+        # Tear down old bridges
         old_links = cfg.get("wan_links", [])
         for link in old_links:
             for dev in (link.get("inner"), link.get("outer")):
@@ -485,5 +485,5 @@ def clear():
 
 
 if __name__ == "__main__":
-    # For utvikling – i prod kjører du via systemd
+    # For devel 
     app.run(host="0.0.0.0", port=8081, debug=True)

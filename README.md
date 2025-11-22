@@ -1,93 +1,295 @@
-# wan_emulator
+# Techkarma NetEm
 
+**Techkarma NetEm** is a modern, browser‑based WAN emulator built on top of Linux `tc/netem`.  
+It lets you shape **latency, jitter, packet loss, and bandwidth** across transparent L2 bridges —
+perfect for testing **firewalls, SD‑WAN units, routers, Starlink behaviour, 4G/5G, IPS systems, failover logic**, and more.
 
+This project is open‑core:  
+- **Free open-source edition** (this repository)  
+- **OVA appliance edition** (prebuilt Debian VM — coming soon)
 
-## Getting started
+---
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+# Features
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### Two independent WAN links  
+Each WAN link uses:
+- **Inner interface** → toward your test device (FW/SD‑WAN/router)
+- **Outer interface** → toward upstream/ISP side  
+Bridges (`br-wan1`, `br-wan2`) are created automatically.
 
-## Add your files
+### GUI-based shaping  
+Clean UI with sliders for:
+- Delay (ms)  
+- Jitter (ms)  
+- Packet loss (%)  
+- Bandwidth limit (Mbit/s)
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+### Link Aliases  
+Give each WAN link a friendly name:  
+`Fiber primary`, `Starlink`, `5G backup`, etc.
+
+### Powered by Linux NetEm  
+Under the hood:
+- `tc qdisc netem` for latency/jitter/loss  
+- `tbf` (token bucket filter) for bandwidth  
+- Linux bridges for transparent forwarding  
+
+### Designed for real labs  
+Optimized for:
+- Fortinet  
+- Cisco  
+- Juniper  
+- Palo Alto  
+- SD‑WAN platforms  
+- Starlink testing  
+- Failover tuning  
+- IPS/IDS behaviour analysis  
+
+---
+
+# Screenshots
+
+### **Dashboard**
+![Dashboard screenshot](docs/dashboard.png)
+
+### **Setup Wizard**
+![Setup screenshot](docs/setup.png)
+
+---
+
+# Architecture
 
 ```
-cd existing_repo
-git remote add origin http://dev.techkarma.internal/karma/wan_emulator.git
-git branch -M main
-git push -uf origin main
+        +----------------------+
+        |  Test Device (FW)    |
+        +----------+-----------+
+                   |
+               (inner NIC)
+                   |
+         +---------+----------+
+         |   Techkarma NetEm  |
+         |     br-wan1        |
+         |   tc/netem+tbf     |
+         +---------+----------+
+                   |
+               (outer NIC)
+                   |
+        +----------+-----------+
+        |   Upstream Router    |
+        +----------------------+
 ```
 
-## Integrate with your tools
+2 bridges = 2 independent WAN paths.
 
-- [ ] [Set up project integrations](http://dev.techkarma.internal/karma/wan_emulator/-/settings/integrations)
+---
 
-## Collaborate with your team
+# Installation (Debian 12 Recommended)
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+## 1. Install dependencies
 
-## Test and Deploy
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip iproute2 bridge-utils git
+```
 
-Use the built-in continuous integration in GitLab.
+## 2. Clone the repo
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+```bash
+cd /opt
+sudo git clone https://github.com/techkarma-no/techkarma-netem.git
+sudo chown -R $USER:$USER techkarma-netem
+cd techkarma-netem
+```
 
-***
+## 3. Create a virtualenv
 
-# Editing this README
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install flask
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+## 4. Run manually (development mode)
 
-## Suggestions for a good README
+```bash
+FLASK_APP=app.py python app.py
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+Then open:
 
-## Name
-Choose a self-explaining name for your project.
+```
+http://<vm-ip>:8081/
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+You will see the **Setup** screen on first launch.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+---
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+# Systemd Service (Recommended)
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## 1. Create `.venv` (if not already)
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+```bash
+cd /opt/techkarma-netem
+python3 -m venv .venv
+source .venv/bin/activate
+pip install flask
+deactivate
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## 2. Create systemd unit
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+File: `/etc/systemd/system/techkarma-netem.service`
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```ini
+[Unit]
+Description=Techkarma NetEm - WAN Emulator UI
+After=network-online.target
+Wants=network-online.target
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+[Service]
+Type=simple
+WorkingDirectory=/opt/techkarma-netem
+ExecStart=/opt/techkarma-netem/.venv/bin/python app.py
+User=techkarma
+Group=techkarma
+Restart=on-failure
+RestartSec=3
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+[Install]
+WantedBy=multi-user.target
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## 3. Enable the service
 
-## License
-For open source projects, say how it is licensed.
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable techkarma-netem
+sudo systemctl start techkarma-netem
+sudo systemctl status techkarma-netem
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+---
+
+# First-Time Setup
+
+1. Go to `http://<vm-ip>:8081/setup`
+2. Assign:
+   - WAN1 alias  
+   - WAN1 inner  
+   - WAN1 outer  
+3. Optionally repeat for WAN2  
+4. Save – bridges are created automatically  
+5. Open **Dashboard**
+
+Your links are now live.
+
+---
+
+# How It Works (Under the Hood)
+
+Each WAN link is implemented as:
+
+```
+br-wanX
+   |-- inner NIC (towards firewall/test device)
+   |-- outer NIC (towards WAN/upstream)
+```
+
+Traffic is shaped on the **inner NIC** via:
+
+- `tc qdisc add dev <nic> root netem delay ... jitter ... loss ...`
+- `tc qdisc add dev <nic> parent 1:1 tbf rate ...`
+
+Clearing shaping:
+
+```bash
+tc qdisc del dev <nic> root
+```
+
+---
+
+# Use Cases
+
+### SD‑WAN Failover
+Emulate:
+- Bad LTE  
+- Moderate Starlink  
+- Weak backup radio  
+Trigger realistic failover behavior.
+
+### Starlink Behavior
+Reproduce:
+- Latency spikes  
+- Temporary packet loss  
+- Saturation under load  
+
+### IPS/Firewall Performance
+Test how your NGFW behaves under real-world poor WAN conditions.
+
+---
+
+# Troubleshooting
+
+### “No qdisc visible”
+Run:
+```bash
+which tc
+tc qdisc show dev <nic>
+```
+
+### Bridges not created
+Make sure no conflicting names exist:
+```bash
+brctl show
+ip link show
+```
+
+### UI not loading
+Check:
+```bash
+sudo systemctl status techkarma-netem
+sudo ss -ltnp | grep 8081
+```
+
+---
+
+# Roadmap
+
+- Multiple WAN links (more than 2)
+- Profile presets
+- API for automation
+- Automatic Starlink-behavior presets
+- Import/export config
+- Authentication for GUI
+- Built‑in package installer
+
+---
+
+# OVA Appliance Edition (Coming Soon)
+
+- Fully preconfigured Debian 12  
+- Preinstalled NetEm UI  
+- Ready-to-run on VMware/Proxmox/VirtualBox  
+- Zero Linux knowledge required  
+
+Sign up: `hello@techkarma.no`
+
+---
+
+# Contributing
+
+PRs, issues and feature requests welcome.  
+Please open GitHub issues before large contributions.
+
+---
+
+# License
+
+MIT License – see `LICENSE`.
+
+---
+
+Made by techkarma  
+for people who need real WAN behavior in their labs.
