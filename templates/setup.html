@@ -313,6 +313,17 @@
       margin-bottom: 10px;
     }
 
+    input[type="text"] {
+      width: 100%;
+      padding: 6px 10px;
+      border-radius: 10px;
+      border: 1px solid #1f2937;
+      background: rgba(15, 23, 42, 0.96);
+      color: var(--text-main);
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+    }
+
     .btn-primary {
       background: var(--accent);
       color: #020617;
@@ -394,7 +405,7 @@
           <div class="top-title">Setup</div>
           <div class="top-sub">
             Select which Linux interfaces should form <strong>WAN 1</strong> and <strong>WAN 2</strong>.
-            Each WAN link uses an <strong>inner</strong> (towards firewall/router) and an
+            Each WAN link uses an <strong>inner</strong> (towards test device) and an
             <strong>outer</strong> (towards ISP/WAN). Bridges (<code>br-wan1</code>, <code>br-wan2</code>)
             are created automatically.
           </div>
@@ -430,7 +441,16 @@
           <div class="wan-grid">
             <div>
               <h3 style="margin:0 0 8px;font-size:0.9rem;">WAN 1</h3>
-              <label for="wan1_inner">Inner interface (towards firewall)</label>
+
+              <label for="wan1_name">Link alias (optional)</label>
+              <input
+                id="wan1_name"
+                name="wan1_name"
+                type="text"
+                placeholder="e.g. Starlink, Fiber primary"
+              />
+
+              <label for="wan1_inner">Inner interface (towards test device)</label>
               <select id="wan1_inner" name="wan1_inner">
                 <option value="">-- not used --</option>
                 {% for nic in all_nics %}
@@ -449,7 +469,16 @@
 
             <div>
               <h3 style="margin:0 0 8px;font-size:0.9rem;">WAN 2</h3>
-              <label for="wan2_inner">Inner interface (towards firewall)</label>
+
+              <label for="wan2_name">Link alias (optional)</label>
+              <input
+                id="wan2_name"
+                name="wan2_name"
+                type="text"
+                placeholder="e.g. Backup 5G"
+              />
+
+              <label for="wan2_inner">Inner interface (towards test device)</label>
               <select id="wan2_inner" name="wan2_inner">
                 <option value="">-- not used --</option>
                 {% for nic in all_nics %}
@@ -481,4 +510,3 @@
   </div>
 </body>
 </html>
-

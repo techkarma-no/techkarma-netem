@@ -14,7 +14,7 @@ from flask import (
 )
 
 app = Flask(__name__)
-app.secret_key = "techkarma-netem"  # kan endres hvis du vil
+app.secret_key = "techkarma-netem"  # endre hvis du vil
 
 BASE_DIR = Path(__file__).parent
 CONFIG_PATH = BASE_DIR / "config.json"
@@ -24,7 +24,6 @@ IP = "/usr/sbin/ip"
 
 
 # ---------- Helper: shell ----------
-
 
 def run_cmd(cmd: str):
     """Run command and return (rc, stdout, stderr)."""
@@ -36,11 +35,10 @@ def run_cmd(cmd: str):
         text=True,
     )
     out, err = proc.communicate()
-    return proc.returncode, out.strip(), err.strip()
+    return proc.returncode, (out or "").strip(), (err or "").strip()
 
 
 # ---------- Config ----------
-
 
 def load_config():
     if CONFIG_PATH.exists():
@@ -61,11 +59,10 @@ def save_config(cfg: dict):
 
 # ---------- NIC discovery ----------
 
-
 def get_all_nics():
     """
-    Returns a list of all non-loopback NIC names (including bridges),
-    e.g. ["ens18", "ens19", "ens20", "ens21", "ens22", "br-wan1"].
+    Returns a list of all non-loopback NIC names,
+    e.g. ["ens18", "ens19", "ens20", "br-wan1", "br-wan2"].
     """
     rc, out, err = run_cmd(f"{IP} -o link show")
     if rc != 0:
@@ -78,15 +75,16 @@ def get_all_nics():
         if len(parts) < 2:
             continue
         name = parts[1].split("@", 1)[0]
+        name = name.strip()
         if name == "lo":
             continue
-        nics.append(name.strip())
+        nics.append(name)
     return sorted(nics)
 
 
 def guess_mgmt_interface():
     """
-    Guess mgmt interface as the one with an IPv4 address.
+    Guess mgmt interface as the first non-loopback NIC with an IPv4 address.
     """
     rc, out, err = run_cmd(f"{IP} -o addr show")
     if rc != 0:
@@ -94,93 +92,52 @@ def guess_mgmt_interface():
 
     candidates = []
     for line in out.splitlines():
-        # example: "2: ens18    inet 10.240.54.8/24 ..."
+        # "2: ens18    inet 10.240.54.8/24 ..."
         parts = line.split()
         if len(parts) >= 4 and parts[2] == "inet":
-            ifname = parts[1]
-            ifname = ifname.split("@", 1)[0]
+            ifname = parts[1].split("@", 1)[0]
             if ifname != "lo":
                 candidates.append(ifname)
 
     return candidates[0] if candidates else None
 
 
-def get_setup_nics():
+def get_setup_nics(cfg: dict):
     """
-    NICs that can be used in setup:
-    - exclude mgmt
-    - exclude bridges (br-*)
-    - exclude loopback
+    Return NICs that are eligible for use in WAN 1 / WAN 2:
+    - not loopback
+    - not mgmt
+    - not existing bridges (br-*)
     """
-    cfg = load_config()
-    mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+    all_nics = get_all_nics()
+    mgmt = cfg.get("mgmt_interface")
+    usable = []
 
-    nics = get_all_nics()
-    filtered = []
-
-    for nic in nics:
-        if nic == "lo":
+    for name in all_nics:
+        if name.startswith("br-"):
             continue
-        if mgmt and nic == mgmt:
+        if mgmt and name == mgmt:
             continue
-        if nic.startswith("br-"):
-            continue
-        filtered.append(nic)
+        usable.append(name)
 
-    return filtered
-
-
-# ---------- Bridge management ----------
-
-
-def bridge_exists(name: str) -> bool:
-    rc, _, _ = run_cmd(f"{IP} link show {name}")
-    return rc == 0
-
-
-def delete_bridge(name: str):
-    if not bridge_exists(name):
-        return
-    run_cmd(f"{IP} link set {name} down")
-    run_cmd(f"{IP} link delete {name} type bridge")
-
-
-def create_or_replace_bridge(bridge_name: str, if1: str, if2: str):
-    """
-    Idempotent bridge creation:
-    - remove existing bridge if present
-    - ensure interfaces are detached from any other master
-    - attach if1/if2 to new bridge
-    """
-    # Remove existing bridge
-    if bridge_exists(bridge_name):
-        delete_bridge(bridge_name)
-
-    # Ensure interfaces are not slaves anywhere
-    for iface in (if1, if2):
-        run_cmd(f"{IP} link set {iface} down")
-        run_cmd(f"{IP} link set {iface} nomaster")
-
-    # Create bridge
-    run_cmd(f"{IP} link add name {bridge_name} type bridge")
-
-    # Attach interfaces
-    run_cmd(f"{IP} link set {if1} master {bridge_name}")
-    run_cmd(f"{IP} link set {if2} master {bridge_name}")
-
-    # Bring everything up
-    run_cmd(f"{IP} link set {bridge_name} up")
-    run_cmd(f"{IP} link set {if1} up")
-    run_cmd(f"{IP} link set {if2} up")
+    return usable
 
 
 # ---------- qdisc parsing / netem ----------
 
-
 def parse_qdisc_output(raw: str):
     """
-    Parse `tc qdisc show dev <if>` output into a small dict.
-    We only try to extract netem parameters; otherwise we return kind only.
+    Parse `tc qdisc show dev <if>` into a dict:
+    {
+      "raw": "...",
+      "parsed": {
+        "kind": "netem" / "fq_codel" / None,
+        "delay_ms": float or None,
+        "jitter_ms": float or None,
+        "loss_pct": float or None,
+        "rate_mbit": float or None,
+      }
+    }
     """
     info = {
         "raw": raw.strip(),
@@ -196,7 +153,6 @@ def parse_qdisc_output(raw: str):
     if not raw.strip():
         return info
 
-    # Use the first line only (root qdisc)
     first_line = raw.splitlines()[0]
 
     # Identify qdisc kind
@@ -208,16 +164,14 @@ def parse_qdisc_output(raw: str):
         return info
 
     if info["parsed"]["kind"] != "netem":
-        # we only parse details for netem
+        # we only parse details for netem; others are left with kind only
         return info
 
-    # delay Xms
+    # delay Xms / delay Xms Yms
     m_delay = re.search(r"delay\s+([\d\.]+)ms", first_line)
     if m_delay:
         info["parsed"]["delay_ms"] = float(m_delay.group(1))
 
-    # jitter Yms (optional second number in delay line)
-    # e.g. "delay 100ms 20ms"
     m_delay2 = re.search(r"delay\s+([\d\.]+)ms\s+([\d\.]+)ms", first_line)
     if m_delay2:
         info["parsed"]["jitter_ms"] = float(m_delay2.group(2))
@@ -227,7 +181,7 @@ def parse_qdisc_output(raw: str):
     if m_loss:
         info["parsed"]["loss_pct"] = float(m_loss.group(1))
 
-    # rate
+    # rate – usually appears in a tbf line
     for line in raw.splitlines():
         m_rate = re.search(r"tbf\s+.*rate\s+([\d\.]+)([KMG])bit", line)
         if m_rate:
@@ -264,23 +218,21 @@ def apply_netem(ifname: str, delay_ms: float, jitter_ms: float,
     # Always start clean
     clear_qdisc(ifname)
 
-    # Build base netem args
     parts = ["netem"]
     if delay_ms and delay_ms > 0:
         if jitter_ms and jitter_ms > 0:
             parts.append(f"delay {delay_ms:.1f}ms {jitter_ms:.1f}ms")
         else:
             parts.append(f"delay {delay_ms:.1f}ms")
+
     if loss_pct and loss_pct > 0:
         parts.append(f"loss {loss_pct:.3f}%")
 
     netem_cmd = f"{TC} qdisc add dev {ifname} root handle 1:0 " + " ".join(parts)
     rc, out, err = run_cmd(netem_cmd)
-
     if rc != 0:
         return False, f"Failed to apply netem: {err or out or 'unknown error'}"
 
-    # tbf for bandwidth if requested
     if rate_mbit and rate_mbit > 0:
         rate_str = f"{rate_mbit:.3f}mbit"
         tbf_cmd = (
@@ -294,15 +246,50 @@ def apply_netem(ifname: str, delay_ms: float, jitter_ms: float,
     return True, "OK"
 
 
-# ---------- Global nav for sidebar ----------
+# ---------- Bridge helpers ----------
 
+def ensure_bridge(br_name: str, inner: str, outer: str):
+    """
+    Create or update a Linux bridge (using 'ip') and enslave inner/outer.
+    """
+    # Detach from any previous masters
+    for dev in (inner, outer):
+        if not dev:
+            continue
+        run_cmd(f"{IP} link set {dev} down")
+        run_cmd(f"{IP} link set {dev} nomaster")
+
+    # Create bridge if missing
+    rc, out, err = run_cmd(f"{IP} link show {br_name}")
+    if rc != 0:
+        run_cmd(f"{IP} link add name {br_name} type bridge")
+
+    # Attach ports
+    for dev in (inner, outer):
+        if not dev:
+            continue
+        run_cmd(f"{IP} link set {dev} master {br_name}")
+        run_cmd(f"{IP} link set {dev} up")
+
+    # Bring bridge up
+    run_cmd(f"{IP} link set {br_name} up")
+
+
+def delete_bridge(br_name: str):
+    """
+    Try to delete bridge if it exists.
+    """
+    rc, out, err = run_cmd(f"{IP} link show {br_name}")
+    if rc != 0:
+        return  # bridge doesn't exist
+    run_cmd(f"{IP} link set {br_name} down")
+    run_cmd(f"{IP} link delete {br_name} type bridge")
+
+
+# ---------- Nav context ----------
 
 @app.context_processor
 def inject_nav():
-    """
-    Makes nav_items + current config available to all templates,
-    so you can easily build a left-hand menu.
-    """
     cfg = load_config()
     return {
         "nav_items": [
@@ -315,12 +302,11 @@ def inject_nav():
 
 # ---------- Routes ----------
 
-
 @app.route("/")
 def index():
     cfg = load_config()
 
-    # Hvis vi ikke har WAN-links ennå, send til wizard
+    # Hvis vi ikke har WAN-links ennå, send til setup
     if not cfg.get("wan_links"):
         return redirect(url_for("setup"))
 
@@ -333,17 +319,18 @@ def index():
     for link in cfg.get("wan_links", []):
         name = link.get("name", "WAN")
         inner = link.get("inner")
-        # outer = link.get("outer")  # vi bruker ikke outer i dashboard nå
 
-        if inner:
-            qdisc_info = get_qdisc_state(inner)
-            nic_states.append(
-                {
-                    "name": inner,
-                    "label": f"{name} (inner)",
-                    "qdisc": qdisc_info,
-                }
-            )
+        if not inner:
+            continue
+
+        qdisc_info = get_qdisc_state(inner)
+        nic_states.append(
+            {
+                "name": inner,
+                "label": f"{name} (inner)",
+                "qdisc": qdisc_info,
+            }
+        )
 
     return render_template(
         "index.html",
@@ -353,41 +340,57 @@ def index():
         wan_links=cfg.get("wan_links", []),
     )
 
+
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
     cfg = load_config()
 
-    if request.method == "POST":
-        # we auto-guess mgmt if not set
-        mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
-        if mgmt:
-            cfg["mgmt_interface"] = mgmt
+    # Sett mgmt hvis vi ikke allerede har det
+    mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+    if mgmt and not cfg.get("mgmt_interface"):
+        cfg["mgmt_interface"] = mgmt
+        save_config(cfg)
 
+    if request.method == "POST":
+        # Les input fra wizard – inkl. alias
         wan1_inner = request.form.get("wan1_inner") or ""
         wan1_outer = request.form.get("wan1_outer") or ""
         wan2_inner = request.form.get("wan2_inner") or ""
         wan2_outer = request.form.get("wan2_outer") or ""
 
+        wan1_name = (request.form.get("wan1_name") or "").strip()
+        wan2_name = (request.form.get("wan2_name") or "").strip()
+
+        # Riv ned gamle bridges/qdiscs
+        old_links = cfg.get("wan_links", [])
+        for link in old_links:
+            for dev in (link.get("inner"), link.get("outer")):
+                if dev:
+                    clear_qdisc(dev)
+            br = link.get("bridge")
+            if br:
+                delete_bridge(br)
+
         wan_links = []
 
-        # WAN1
+        # WAN 1
         if wan1_inner and wan1_outer:
-            create_or_replace_bridge("br-wan1", wan1_inner, wan1_outer)
+            ensure_bridge("br-wan1", wan1_inner, wan1_outer)
             wan_links.append(
                 {
-                    "name": "WAN 1",
+                    "name": wan1_name or "WAN 1",
                     "bridge": "br-wan1",
                     "inner": wan1_inner,
                     "outer": wan1_outer,
                 }
             )
 
-        # WAN2
+        # WAN 2
         if wan2_inner and wan2_outer:
-            create_or_replace_bridge("br-wan2", wan2_inner, wan2_outer)
+            ensure_bridge("br-wan2", wan2_inner, wan2_outer)
             wan_links.append(
                 {
-                    "name": "WAN 2",
+                    "name": wan2_name or "WAN 2",
                     "bridge": "br-wan2",
                     "inner": wan2_inner,
                     "outer": wan2_outer,
@@ -397,57 +400,47 @@ def setup():
         cfg["wan_links"] = wan_links
         save_config(cfg)
 
-        if not wan_links:
-            flash("No WAN links were configured. Please select at least one pair.", "info")
+        if wan_links:
+            flash("WAN links saved and bridges created.", "success")
+            return redirect(url_for("index"))
+        else:
+            flash("No WAN links configured – please select at least one inner/outer pair.", "info")
             return redirect(url_for("setup"))
 
-        flash("WAN links created/updated successfully.", "success")
-        return redirect(url_for("index"))
-
     # GET
-    all_nics = get_setup_nics()
+    setup_nics = get_setup_nics(cfg)
 
     return render_template(
         "setup.html",
         page="setup",
-        all_nics=all_nics,
+        all_nics=setup_nics,
+        config=cfg,
     )
 
 
 @app.route("/reset-config", methods=["POST"])
 def reset_config():
-    """
-    Reset configuration:
-    - clear netem
-    - delete bridges
-    - remove config.json
-    """
     cfg = load_config()
-
-    # clear qdisc & delete bridges defined in config
+    # Clear qdiscs and delete bridges
     for link in cfg.get("wan_links", []):
+        for dev in (link.get("inner"), link.get("outer")):
+            if dev:
+                clear_qdisc(dev)
         br = link.get("bridge")
         if br:
-            clear_qdisc(br)
             delete_bridge(br)
-
-        # rens også qdisc på inner/outer for sikkerhets skyld
-        for key in ("inner", "outer"):
-            iface = link.get(key)
-            if iface:
-                clear_qdisc(iface)
 
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
 
-    flash("Configuration reset. Run setup again.", "info")
+    flash("Configuration reset. Bridges removed and qdiscs cleared.", "info")
     return redirect(url_for("setup"))
 
 
 @app.route("/configure", methods=["POST"])
 def configure():
     """
-    Apply netem settings to a single interface (typically ens19/ens21 osv).
+    Apply netem settings to a single interface.
     Expect form fields:
       itf, delay_ms, jitter_ms, loss_pct, rate_mbit
     """
@@ -456,22 +449,19 @@ def configure():
         flash("Missing interface name.", "error")
         return redirect(url_for("index"))
 
-    try:
-        delay_ms = float(request.form.get("delay_ms") or 0)
-    except ValueError:
-        delay_ms = 0.0
-    try:
-        jitter_ms = float(request.form.get("jitter_ms") or 0)
-    except ValueError:
-        jitter_ms = 0.0
-    try:
-        loss_pct = float(request.form.get("loss_pct") or 0)
-    except ValueError:
-        loss_pct = 0.0
-    try:
-        rate_mbit = float(request.form.get("rate_mbit") or 0)
-    except ValueError:
-        rate_mbit = 0.0
+    def parse_float(field: str, default: float = 0.0):
+        val = request.form.get(field)
+        if val is None or val == "":
+            return default
+        try:
+            return float(val)
+        except ValueError:
+            return default
+
+    delay_ms = parse_float("delay_ms", 0.0)
+    jitter_ms = parse_float("jitter_ms", 0.0)
+    loss_pct = parse_float("loss_pct", 0.0)
+    rate_mbit = parse_float("rate_mbit", 0.0)
 
     ok, msg = apply_netem(ifname, delay_ms, jitter_ms, loss_pct, rate_mbit)
     if ok:
@@ -495,5 +485,5 @@ def clear():
 
 
 if __name__ == "__main__":
-    # For utvikling – i prod kjører du via systemd / gunicorn
+    # For utvikling – i prod kjører du via systemd
     app.run(host="0.0.0.0", port=8081, debug=True)
