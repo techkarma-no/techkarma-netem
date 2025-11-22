@@ -25,7 +25,8 @@ IP = "/usr/sbin/ip"
 
 # ---------- Helper: shell ----------
 
-def run_cmd(cmd):
+
+def run_cmd(cmd: str):
     """Run command and return (rc, stdout, stderr)."""
     proc = subprocess.Popen(
         cmd,
@@ -40,6 +41,7 @@ def run_cmd(cmd):
 
 # ---------- Config ----------
 
+
 def load_config():
     if CONFIG_PATH.exists():
         try:
@@ -50,7 +52,7 @@ def load_config():
     return {}
 
 
-def save_config(cfg):
+def save_config(cfg: dict):
     tmp = CONFIG_PATH.with_suffix(".tmp")
     with tmp.open("w") as f:
         json.dump(cfg, f, indent=2)
@@ -58,6 +60,7 @@ def save_config(cfg):
 
 
 # ---------- NIC discovery ----------
+
 
 def get_all_nics():
     """
@@ -102,33 +105,111 @@ def guess_mgmt_interface():
     return candidates[0] if candidates else None
 
 
+def get_setup_nics():
+    """
+    NICs that can be used in setup:
+    - exclude mgmt
+    - exclude bridges (br-*)
+    - exclude loopback
+    """
+    cfg = load_config()
+    mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+
+    nics = get_all_nics()
+    filtered = []
+
+    for nic in nics:
+        if nic == "lo":
+            continue
+        if mgmt and nic == mgmt:
+            continue
+        if nic.startswith("br-"):
+            continue
+        filtered.append(nic)
+
+    return filtered
+
+
 def get_wan_nics(cfg=None):
     """
-    Return only NICs that are eligible for WAN simulation:
-    - not loopback
-    - not mgmt
-    - not bridges (br-*)
+    Return NICs that are used as WAN links in the dashboard.
+    Prefer configured bridges (br-wan1 / br-wan2). If not configured,
+    fall back to non-mgmt, non-loopback, non-bridge interfaces.
     """
     if cfg is None:
         cfg = load_config()
 
+    wan = []
+    for link in cfg.get("wan_links", []):
+        br = link.get("bridge")
+        if br:
+            wan.append(br)
+
+    if wan:
+        return wan
+
+    # fallback – should normally not be used once setup is done
     mgmt = cfg.get("mgmt_interface")
     all_nics = get_all_nics()
-
-    wan = []
+    fallback = []
     for name in all_nics:
-        if name.startswith("br-"):
-            continue
         if name == "lo":
             continue
         if mgmt and name == mgmt:
             continue
-        wan.append(name)
+        if name.startswith("br-"):
+            continue
+        fallback.append(name)
+    return fallback
 
-    return wan
+
+# ---------- Bridge management ----------
+
+
+def bridge_exists(name: str) -> bool:
+    rc, _, _ = run_cmd(f"{IP} link show {name}")
+    return rc == 0
+
+
+def delete_bridge(name: str):
+    if not bridge_exists(name):
+        return
+    run_cmd(f"{IP} link set {name} down")
+    # type bridge for safety, but some systems accept without
+    run_cmd(f"{IP} link delete {name} type bridge")
+
+
+def create_or_replace_bridge(bridge_name: str, if1: str, if2: str):
+    """
+    Idempotent bridge creation:
+    - remove existing bridge if present
+    - ensure interfaces are detached from any other master
+    - attach if1/if2 to new bridge
+    """
+    # Remove existing bridge
+    if bridge_exists(bridge_name):
+        delete_bridge(bridge_name)
+
+    # Ensure interfaces are not slaves anywhere
+    for iface in (if1, if2):
+        run_cmd(f"{IP} link set {iface} down")
+        run_cmd(f"{IP} link set {iface} nomaster")
+
+    # Create bridge
+    run_cmd(f"{IP} link add name {bridge_name} type bridge")
+
+    # Attach interfaces
+    run_cmd(f"{IP} link set {if1} master {bridge_name}")
+    run_cmd(f"{IP} link set {if2} master {bridge_name}")
+
+    # Bring everything up
+    run_cmd(f"{IP} link set {bridge_name} up")
+    run_cmd(f"{IP} link set {if1} up")
+    run_cmd(f"{IP} link set {if2} up")
 
 
 # ---------- qdisc parsing / netem ----------
+
 
 def parse_qdisc_output(raw: str):
     """
@@ -236,32 +317,52 @@ def apply_netem(ifname: str, delay_ms: float, jitter_ms: float,
 
     # tbf for bandwidth if requested
     if rate_mbit and rate_mbit > 0:
-        # keep it simple
         rate_str = f"{rate_mbit:.3f}mbit"
-        # attach tbf as child
         tbf_cmd = (
             f"{TC} qdisc add dev {ifname} parent 1:1 handle 10: tbf "
             f"rate {rate_str} buffer 3200 limit 32768"
         )
         rc2, out2, err2 = run_cmd(tbf_cmd)
         if rc2 != 0:
-            # not fatal, but we report it
             return False, f"Netem OK, but tbf failed: {err2 or out2 or 'unknown error'}"
 
     return True, "OK"
 
 
+# ---------- Global nav for sidebar ----------
+
+
+@app.context_processor
+def inject_nav():
+    """
+    Makes nav_items + current config available to all templates,
+    so you can easily build a left-hand menu.
+    """
+    cfg = load_config()
+    return {
+        "nav_items": [
+            {"id": "dashboard", "label": "Dashboard", "endpoint": "index"},
+            {"id": "setup", "label": "Setup wizard", "endpoint": "setup"},
+        ],
+        "config": cfg,
+    }
+
+
 # ---------- Routes ----------
+
 
 @app.route("/")
 def index():
     cfg = load_config()
 
-    # 🔹 Hvis vi ikke har config, eller mangler mgmt_interface -> send til wizard
-    if not cfg or "mgmt_interface" not in cfg:
+    # If we don't have WAN links configured yet -> go to wizard
+    if not cfg.get("wan_links"):
         return redirect(url_for("setup"))
 
     mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+    if mgmt and not cfg.get("mgmt_interface"):
+        cfg["mgmt_interface"] = mgmt
+        save_config(cfg)
 
     wan_nics = get_wan_nics(cfg)
 
@@ -277,48 +378,95 @@ def index():
 
     return render_template(
         "index.html",
+        page="dashboard",
         mgmt_interface=mgmt,
         wan_nics=wan_nics,
         nic_states=nic_states,
-        config=cfg,
+        wan_links=cfg.get("wan_links", []),
     )
 
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
     cfg = load_config()
-    force = request.args.get("force") == "1"
 
     if request.method == "POST":
-        # lagre mgmt-interface (og evt. mer senere)
-        mgmt = request.form.get("mgmt_interface") or guess_mgmt_interface()
+        # we auto-guess mgmt if not set
+        mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
         if mgmt:
             cfg["mgmt_interface"] = mgmt
-            save_config(cfg)
-            flash(f"Management interface set to {mgmt}", "success")
-        else:
-            flash("Could not determine management interface.", "error")
 
+        wan1_inner = request.form.get("wan1_inner") or ""
+        wan1_outer = request.form.get("wan1_outer") or ""
+        wan2_inner = request.form.get("wan2_inner") or ""
+        wan2_outer = request.form.get("wan2_outer") or ""
+
+        wan_links = []
+
+        # WAN1
+        if wan1_inner and wan1_outer:
+            create_or_replace_bridge("br-wan1", wan1_inner, wan1_outer)
+            wan_links.append(
+                {
+                    "name": "WAN 1",
+                    "bridge": "br-wan1",
+                    "inner": wan1_inner,
+                    "outer": wan1_outer,
+                }
+            )
+
+        # WAN2
+        if wan2_inner and wan2_outer:
+            create_or_replace_bridge("br-wan2", wan2_inner, wan2_outer)
+            wan_links.append(
+                {
+                    "name": "WAN 2",
+                    "bridge": "br-wan2",
+                    "inner": wan2_inner,
+                    "outer": wan2_outer,
+                }
+            )
+
+        cfg["wan_links"] = wan_links
+        save_config(cfg)
+
+        if not wan_links:
+            flash("No WAN links were configured. Please select at least one pair.", "info")
+            return redirect(url_for("setup"))
+
+        flash("WAN links created/updated successfully.", "success")
         return redirect(url_for("index"))
 
     # GET
-    all_nics = get_all_nics()
-    guessed_mgmt = cfg.get("mgmt_interface") or guess_mgmt_interface()
+    all_nics = get_setup_nics()
 
     return render_template(
         "setup.html",
+        page="setup",
         all_nics=all_nics,
-        guessed_mgmt=guessed_mgmt,
-        config=cfg,
-        force=force,
     )
 
 
 @app.route("/reset-config", methods=["POST"])
 def reset_config():
-    # Her kan vi også rive ned bridges etc senere hvis vi vil
+    """
+    Reset configuration:
+    - clear netem
+    - delete bridges
+    - remove config.json
+    """
+    cfg = load_config()
+
+    # clear qdisc & delete bridges defined in config
+    for link in cfg.get("wan_links", []):
+        br = link.get("bridge")
+        if br:
+            clear_qdisc(br)
+            delete_bridge(br)
+
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
+
     flash("Configuration reset. Run setup again.", "info")
     return redirect(url_for("setup"))
 
@@ -326,7 +474,7 @@ def reset_config():
 @app.route("/configure", methods=["POST"])
 def configure():
     """
-    Apply netem settings to a single interface.
+    Apply netem settings to a single interface (typically br-wan1 or br-wan2).
     Expect form fields:
       itf, delay_ms, jitter_ms, loss_pct, rate_mbit
     """
@@ -374,5 +522,5 @@ def clear():
 
 
 if __name__ == "__main__":
-    # For utvikling – i prod kjører du via systemd
+    # For utvikling – i prod kjører du via systemd / gunicorn
     app.run(host="0.0.0.0", port=8081, debug=True)
