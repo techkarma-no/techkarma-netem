@@ -130,39 +130,6 @@ def get_setup_nics():
     return filtered
 
 
-def get_wan_nics(cfg=None):
-    """
-    Return NICs that are used as WAN links in the dashboard.
-    Prefer configured bridges (br-wan1 / br-wan2). If not configured,
-    fall back to non-mgmt, non-loopback, non-bridge interfaces.
-    """
-    if cfg is None:
-        cfg = load_config()
-
-    wan = []
-    for link in cfg.get("wan_links", []):
-        br = link.get("bridge")
-        if br:
-            wan.append(br)
-
-    if wan:
-        return wan
-
-    # fallback – should normally not be used once setup is done
-    mgmt = cfg.get("mgmt_interface")
-    all_nics = get_all_nics()
-    fallback = []
-    for name in all_nics:
-        if name == "lo":
-            continue
-        if mgmt and name == mgmt:
-            continue
-        if name.startswith("br-"):
-            continue
-        fallback.append(name)
-    return fallback
-
-
 # ---------- Bridge management ----------
 
 
@@ -175,7 +142,6 @@ def delete_bridge(name: str):
     if not bridge_exists(name):
         return
     run_cmd(f"{IP} link set {name} down")
-    # type bridge for safety, but some systems accept without
     run_cmd(f"{IP} link delete {name} type bridge")
 
 
@@ -261,8 +227,7 @@ def parse_qdisc_output(raw: str):
     if m_loss:
         info["parsed"]["loss_pct"] = float(m_loss.group(1))
 
-    # rate - typically appears in a separate tbf qdisc, but we keep placeholder
-    # We'll parse from any subsequent line with 'tbf rate'
+    # rate
     for line in raw.splitlines():
         m_rate = re.search(r"tbf\s+.*rate\s+([\d\.]+)([KMG])bit", line)
         if m_rate:
@@ -364,23 +329,36 @@ def index():
         cfg["mgmt_interface"] = mgmt
         save_config(cfg)
 
-    wan_nics = get_wan_nics(cfg)
-
+    # Bygg opp state per fysisk interface (inner/outer), ikke per bridge
     nic_states = []
-    for ifname in wan_nics:
-        qdisc_info = get_qdisc_state(ifname)
-        nic_states.append(
-            {
-                "name": ifname,
-                "qdisc": qdisc_info,
-            }
-        )
+    for link in cfg.get("wan_links", []):
+        name = link.get("name", "WAN")
+        inner = link.get("inner")
+        outer = link.get("outer")
+
+        if inner:
+            qdisc_info = get_qdisc_state(inner)
+            nic_states.append(
+                {
+                    "name": inner,
+                    "label": f"{name} inner",
+                    "qdisc": qdisc_info,
+                }
+            )
+        if outer:
+            qdisc_info = get_qdisc_state(outer)
+            nic_states.append(
+                {
+                    "name": outer,
+                    "label": f"{name} outer",
+                    "qdisc": qdisc_info,
+                }
+            )
 
     return render_template(
         "index.html",
         page="dashboard",
         mgmt_interface=mgmt,
-        wan_nics=wan_nics,
         nic_states=nic_states,
         wan_links=cfg.get("wan_links", []),
     )
@@ -464,6 +442,12 @@ def reset_config():
             clear_qdisc(br)
             delete_bridge(br)
 
+        # rens også qdisc på inner/outer for sikkerhets skyld
+        for key in ("inner", "outer"):
+            iface = link.get(key)
+            if iface:
+                clear_qdisc(iface)
+
     if CONFIG_PATH.exists():
         CONFIG_PATH.unlink()
 
@@ -474,7 +458,7 @@ def reset_config():
 @app.route("/configure", methods=["POST"])
 def configure():
     """
-    Apply netem settings to a single interface (typically br-wan1 or br-wan2).
+    Apply netem settings to a single interface (typically ens19/ens21 osv).
     Expect form fields:
       itf, delay_ms, jitter_ms, loss_pct, rate_mbit
     """
