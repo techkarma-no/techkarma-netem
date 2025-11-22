@@ -94,16 +94,16 @@
           <label for="wan1_inner">Inner interface (towards firewall)</label>
           <select id="wan1_inner" name="wan1_inner">
             <option value="">-- not used --</option>
-            {% for iface in interfaces %}
-              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% for iface in all_nics %}
+              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
             {% endfor %}
           </select>
 
           <label for="wan1_outer">Outer interface (towards WAN)</label>
           <select id="wan1_outer" name="wan1_outer">
             <option value="">-- not used --</option>
-            {% for iface in interfaces %}
-              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% for iface in all_nics %}
+              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
             {% endfor %}
           </select>
         </div>
@@ -113,16 +113,16 @@
           <label for="wan2_inner">Inner interface (towards firewall)</label>
           <select id="wan2_inner" name="wan2_inner">
             <option value="">-- not used --</option>
-            {% for iface in interfaces %}
-              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% for iface in all_nics %}
+              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
             {% endfor %}
           </select>
 
           <label for="wan2_outer">Outer interface (towards WAN)</label>
           <select id="wan2_outer" name="wan2_outer">
             <option value="">-- not used --</option>
-            {% for iface in interfaces %}
-              <option value="{{ iface.name }}">{{ iface.name }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
+            {% for iface in all_nics %}
+              <option value="{{ iface }}">{{ iface }}{% if iface.ips %} ({{ iface.ips[0] }}){% endif %}</option>
             {% endfor %}
           </select>
         </div>
@@ -134,9 +134,9 @@
     <div class="iface-list">
       <strong>Detected interfaces:</strong>
       <ul>
-        {% for iface in interfaces %}
+        {% for iface in all_nics %}
           <li>
-            <code>{{ iface.name }}</code>
+            <code>{{ iface }}</code>
             {% if iface.ips %} – IP: {{ iface.ips | join(", ") }}{% endif %}
           </li>
         {% endfor %}
