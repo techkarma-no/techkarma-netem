@@ -274,7 +274,7 @@ sudo ss -ltnp | grep 8081
 - Ready-to-run on VMware/Proxmox/VirtualBox  
 - Zero Linux knowledge required  
 
-Sign up: `hello@techkarma.no`
+Sign up: `admin@techkarma.no`
 
 ---
 
