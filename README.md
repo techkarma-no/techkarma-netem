@@ -8,7 +8,7 @@ This project is open‑core:
 - **Free open-source edition** (this repository)  
 - **Paid OVA appliance** --- prebuilt Debian VM (ready-to-run)
 
-➡ Official site: **https://techkarma.no/**\
+➡ Official site: **https://techkarma.no/**
 ➡ Quickstart Guide: **GUIDE.md**\
 ➡ OVA Appliance: **https://buymeacoffee.com/techkarma/extras**
 
