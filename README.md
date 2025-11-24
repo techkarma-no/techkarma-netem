@@ -6,7 +6,11 @@ perfect for testing **firewalls, SD‑WAN units, routers, Starlink behaviour, 4G
 
 This project is open‑core:  
 - **Free open-source edition** (this repository)  
-- **OVA appliance edition** (prebuilt Debian VM — coming soon)
+- **Paid OVA appliance** --- prebuilt Debian VM (ready-to-run)
+
+➡ Official site: **https://techkarma.no/**\
+➡ Quickstart Guide: **GUIDE.md**\
+➡ OVA Appliance: **https://buymeacoffee.com/techkarma/extras**
 
 ---
 
@@ -267,14 +271,21 @@ sudo ss -ltnp | grep 8081
 
 ---
 
-# OVA Appliance Edition (Coming Soon)
+# OVA Appliance Edition (Paid Edition)
 
-- Fully preconfigured Debian 12  
-- Preinstalled NetEm UI  
-- Ready-to-run on VMware/Proxmox/VirtualBox  
-- Zero Linux knowledge required  
+A ready-to-use VM image for: - Proxmox\
+- VMware ESXi\
+- VMware Workstation\
+- VirtualBox\
+- XCP-NG
 
-Sign up: `admin@techkarma.no`
+Includes: - Debian preconfigured\
+- Techkarma NetEm preinstalled\
+- Web UI running automatically\
+- Forced password change on first boot
+
+Buy & auto-download:\
+https://buymeacoffee.com/techkarma/extras
 
 ---
 
